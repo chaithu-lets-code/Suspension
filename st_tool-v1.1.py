@@ -1,14 +1,13 @@
- #!/usr/bin/env python3
+#!/usr/bin/env python3
 
 import subprocess
 import getpass
 from json import loads
 import argparse
-from prettytable import PrettyTable
+from prettytable import PrettyTable as table
 import multiprocessing
 from nie.db import netarch
 import time
-
 
 def get_ecors_under_ldap(ldap):
     engine = netarch.engine(query={'charset': 'utf8'}, user='phpview')
@@ -34,10 +33,10 @@ def get_ecors_under_ldap(ldap):
     return result
 
 
-def get_user(cmd):
+def get_user(cmd,counter,size):
     try:
         out = subprocess.getoutput(cmd)
-        #print(cmd)
+        printProgressBar(counter,size)
         return out
     except:
         pass
@@ -50,9 +49,21 @@ def get_ecors(lst):
 def get_ecors_cmd(cmd, ecors):
     return [cmd + ecor for ecor in ecors]
 
-# x = threading.Thread(target=get_ecors_under_ldap,args=())
-# print(threading.active_count())
-# print(threading.enumerate())
+
+def printProgressBar (iteration, total, prefix = '', suffix = '', decimals = 1, length = 100, fill = '█', printEnd = "\r"):
+   
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filledLength = int(length * iteration // total)
+    bar = fill * filledLength + '-' * (length - filledLength)
+    #print(f'\r{prefix} |{bar}| {percent}% {suffix}', end = printEnd)
+    print('{} |{}| {}% {}'.format(prefix,bar,percent,suffix), end = printEnd)
+    # Print New Line on Complete
+    if iteration == total: 
+        print()
+
+
+
+
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description='This is for region suspension')
@@ -62,7 +73,7 @@ if __name__ == '__main__':
         'suspension_type',
         choices=['region', 'region_v6', 'machine'],
         type=str,
-        help='to selet values for regions'
+        help='st_tool.py region -> region level suspension\n st_tool.py machine -> machine level suspension'
     )
 
     ARGS = parser.parse_args()
@@ -73,17 +84,23 @@ if __name__ == '__main__':
     # using spawn rather than fork
     multiprocessing.set_start_method('spawn')
 
-    table = PrettyTable()
-
-    table.field_names = (['Ecorname', 'target', 'network', 'target_type', 'ticket', 'reason'])
-    print("checking the suspensions under",getpass.getuser().upper()," accounts")
-    print("Script is running background.. Look at distant object in the window . . .")
+    #table = PrettyTable()
+    #table.field_names = (['Ecorname', 'target', 'network', 'target_type', 'ticket', 'reason'])
+    #print("Code is running background.. lets wait for a moment to get output")
+    print("checking the suspensions under",getpass.getuser().upper(),"accounts",'\n')
+    myTable = table(['EcorName','Target','Network','Target_type','Ticket','Reason'])
+    
+    size = len(ecors)
+    printProgressBar(0,size)
+    items = list(range(1+size))
+    lst = [size] * size
+    
     start_time=time.time()
-    pool = multiprocessing.Pool(processes=multiprocessing.cpu_count()) #taking maximum cpu threads automatically
-
-    cmd_runs = pool.map(
+    pool = multiprocessing.Pool(processes=multiprocessing.cpu_count())
+    cmd_runs = pool.starmap(
         get_user,
-        ecors_cmd
+        zip(ecors_cmd, items, lst)
+
     )
 
     pool.close()
@@ -91,6 +108,7 @@ if __name__ == '__main__':
     end_time=time.time()
 
     for ecor, cmd_run in zip(ecors, cmd_runs):
+        
 
         if 'Warning:' in cmd_run:
             continue
@@ -100,8 +118,8 @@ if __name__ == '__main__':
 
                 if ARGS.suspension_type == row['target_type']:
 
-                    table.add_row(
+                    myTable.add_row(
                         [ecor, row['target'], row['network_name'], row['target_type'], row['ticket'], row['reason']])
     print()
-    print(table)
-    print("Time Elapsed:", round(end_time-start_time), "[secs..]") 
+    print(myTable)
+    print("Time Elapse:",round(end_time-start_time),'Secs..')
